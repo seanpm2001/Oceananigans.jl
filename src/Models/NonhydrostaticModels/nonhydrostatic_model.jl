@@ -223,7 +223,7 @@ function NonhydrostaticModel(; grid,
 
     # Regularize forcing for model tracer and velocity fields.
     model_fields = merge(velocities, tracers, auxiliary_fields)
-    forcing = model_forcing(model_fields; forcing...)
+    forcing = model_forcing(model_fields, grid; forcing...)
 
     model = NonhydrostaticModel(arch, grid, clock, advection, buoyancy, coriolis, stokes_drift,
                                 forcing, closure, background_fields, particles, biogeochemistry, velocities, tracers,

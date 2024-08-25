@@ -186,7 +186,7 @@ function ShallowWaterModel(;
 
     # Regularize forcing and closure for model tracer and velocity fields.
     model_fields = merge(solution, tracers)
-    forcing = model_forcing(model_fields; forcing...)
+    forcing = model_forcing(model_fields, grid; forcing...)
     closure = with_tracers(tracernames(tracers), closure)
 
     model = ShallowWaterModel(grid,

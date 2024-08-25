@@ -35,7 +35,7 @@ Return a `NamedTuple` of forcing functions for each field in `model_fields`, wra
 forcing functions in `ContinuousForcing`s and ensuring that `ContinuousForcing`s are
 located correctly for each field.
 """
-function model_forcing(model_fields; forcings...)
+function model_forcing(model_fields, grid; forcings...)
 
     model_field_names = keys(model_fields)
 

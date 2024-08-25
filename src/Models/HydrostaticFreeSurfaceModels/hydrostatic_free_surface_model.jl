@@ -185,7 +185,7 @@ function HydrostaticFreeSurfaceModel(; grid,
 
     # Regularize forcing for model tracer and velocity fields.
     model_fields = merge(hydrostatic_prognostic_fields(velocities, free_surface, tracers), auxiliary_fields)
-    forcing = model_forcing(model_fields; forcing...)
+    forcing = model_forcing(model_fields, grid; forcing...)
 
     default_tracer_advection, tracer_advection = validate_tracer_advection(tracer_advection, grid)
 
