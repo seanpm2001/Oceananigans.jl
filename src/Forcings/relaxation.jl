@@ -143,9 +143,23 @@ struct GaussianMask{D, T}
     end
 end
 
-@inline (g::GaussianMask{:x})(x, y, z) = exp(-(x - g.center)^2 / (2 * g.width^2))
-@inline (g::GaussianMask{:y})(x, y, z) = exp(-(y - g.center)^2 / (2 * g.width^2))
-@inline (g::GaussianMask{:z})(x, y, z) = exp(-(z - g.center)^2 / (2 * g.width^2))
+@inline gaussian(x, c, w) = exp(-(x - c)^2 / 2w^2)
+
+@inline (g::GaussianMask{:x})(x, y, z) = gaussian(x, g.center, g.width)
+@inline (g::GaussianMask{:y})(x, y, z) = gaussian(y, g.center, g.width)
+@inline (g::GaussianMask{:z})(x, y, z) = gaussian(z, g.center, g.width)
+
+# For Flat grids?
+@inline (g::GaussianMask{:x})(x) = gaussian(x, g.center, g.width)
+@inline (g::GaussianMask{:y})(y) = gaussian(y, g.center, g.width)
+@inline (g::GaussianMask{:z})(z) = gaussian(z, g.center, g.width)
+
+@inline (g::GaussianMask{:x})(x, _) = gaussian(x, g.center, g.width)
+@inline (g::GaussianMask{:z})(_, z) = gaussian(z, g.center, g.width)
+
+# Can either be (y, z) or (x, y)
+# @inline (g::GaussianMask{:y})(y, _) = gaussian(y, g.center, g.width)
+# @inline (g::GaussianMask{:y})(_, y) = gaussian(y, g.center, g.width)
 
 show_exp_arg(D, c) = c == 0 ? "$D^2" :
                      c > 0  ? "($D - $c)^2" :
