@@ -37,12 +37,20 @@ function set_diffusivity!(model, diffusivity)
 end
 
 @inline function myset!(model, value)
-   ϕ = getproperty(model.tracers, :c)
+   if :c ∈ propertynames(model.velocities)
+     ϕ = getproperty(model.velocities, :c)
+   elseif :c ∈ propertynames(model.tracers)
+      ϕ = getproperty(model.tracers, :c)
+   elseif :c ∈ propertynames(model.free_surface)
+      ϕ = getproperty(model.free_surface, :c)
+   else
+       throw(ArgumentError("name c not found in model.velocities, model.tracers, or model.free_surface"))
+   end
    
    @apply_regionally set!(ϕ, value)
 
-   initialize!(model)
-   update_state!(model)
+    initialize!(model)
+    update_state!(model)
 
     return nothing
 end
@@ -52,7 +60,7 @@ function set_initial_condition!(model, amplitude)
 
     # This has a "width" of 0.1
     cᵢ(x, y, z) = amplitude[] * exp(-z^2 / 0.02 - (x^2 + y^2) / 0.05)
-    myset!(model, cᵢ)
+    set!(model, cᵢ)
 
     return nothing
 end
