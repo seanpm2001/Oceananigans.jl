@@ -19,6 +19,62 @@ using KernelAbstractions
 
 const maximum_diffusivity = 100
 
+# myinitialize!(model) = Oceananigans.Models.HydrostaticFreeSurfaceModels.initialize_free_surface!(model.free_surface, model.grid, model.velocities)
+
+myupdate_state!(model, callbacks=[]; compute_tendencies = true) =
+    myupdate_state!(model, model.grid, callbacks; compute_tendencies)
+
+function myupdate_state!(model, grid, callbacks; compute_tendencies = true)
+    # Oceananigans.Models.HydrostaticFreeSurfaceModels.mask_immersed_model_fields!(model, grid)
+
+    # Update possible FieldTimeSeries used in the model
+    # Oceananigans.Models.HydrostaticFreeSurfaceModels.update_model_field_time_series!(model, model.clock)
+
+    # Oceananigans.Models.HydrostaticFreeSurfaceModels.fill_halo_regions!(Oceananigans.Models.HydrostaticFreeSurfaceModels.prognostic_fields(model), model.clock, fields(model); async = true)
+    # Oceananigans.Models.HydrostaticFreeSurfaceModels.replace_horizontal_vector_halos!(model.velocities, model.grid)
+    # Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_auxiliaries!(model)
+
+    # Oceananigans.Models.HydrostaticFreeSurfaceModels.fill_halo_regions!(model.diffusivity_fields; only_local_halos = true)
+
+    # Oceananigans.Models.HydrostaticFreeSurfaceModels.update_biogeochemical_state!(model.biogeochemistry, model)
+
+    Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_tendencies!(model, callbacks)
+
+    return nothing
+end
+
+function mycompute_tendencies!(model, callbacks)
+
+    kernel_parameters = tuple(Oceananigans.Models.HydrostaticFreeSurfaceModels.interior_tendency_kernel_parameters(model.grid))
+
+    # Calculate contributions to momentum and tracer tendencies from fluxes and volume terms in the
+    # interior of the domain
+     Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_hydrostatic_free_surface_tendency_contributions!(model, kernel_parameters;
+                                                             active_cells_map = active_interior_map(model.grid))
+
+     Oceananigans.Models.HydrostaticFreeSurfaceModels.complete_communication_and_compute_boundary!(model, model.grid, model.architecture)
+
+    # Calculate contributions to momentum and tracer tendencies from user-prescribed fluxes across the
+    # boundaries of the domain
+     Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_hydrostatic_boundary_tendency_contributions!(model.timestepper.Gⁿ,
+                                                         model.architecture,
+                                                         model.velocities,
+                                                         model.free_surface,
+                                                         model.tracers,
+                                                         model.clock,
+                                                         fields(model),
+                                                         model.closure,
+                                                         model.buoyancy)
+
+    #for callback in callbacks
+    #    callback.callsite isa TendencyCallsite && callback(model)
+    #end
+
+     Oceananigans.Models.HydrostaticFreeSurfaceModels.update_tendencies!(model.biogeochemistry, model)
+
+    return nothing
+end
+
 function set_initial_condition!(model, amplitude)
     amplitude = Ref(amplitude)
 
@@ -30,18 +86,11 @@ function set_initial_condition!(model, amplitude)
     # @apply_regionally set!(ϕ,ci)
     #apply_regionally!(set!, ϕ, ci)
     Oceananigans.set!(ϕ, ci)
-    
-    kernel_parameters = tuple(Oceananigans.Models.HydrostaticFreeSurfaceModels.interior_tendency_kernel_parameters(model.grid))
-    Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_hydrostatic_boundary_tendency_contributions!(model.timestepper.Gⁿ,
-                                                         model.architecture,
-                                                         model.velocities,
-                                                         model.free_surface,
-                                                         model.tracers,
-                                                         model.clock,
-                                                         fields(model),
-                                                         model.closure,
-                                                         model.buoyancy)
 
+    # Oceananigans.initialize!(model)
+    # Oceananigans.
+    # myupdate_state!(model)
+    mycompute_tendencies!(model, ()) # callbacks)
 
     return nothing
 end
