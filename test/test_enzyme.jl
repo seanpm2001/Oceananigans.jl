@@ -19,33 +19,6 @@ using KernelAbstractions
 
 const maximum_diffusivity = 100
 
-# myinitialize!(model) = Oceananigans.Models.HydrostaticFreeSurfaceModels.initialize_free_surface!(model.free_surface, model.grid, model.velocities)
-
-myupdate_state!(model, callbacks=[]; compute_tendencies = true) =
-    myupdate_state!(model, model.grid, callbacks; compute_tendencies)
-
-function myupdate_state!(model, grid, callbacks; compute_tendencies = true)
-    @apply_regionally Oceananigans.Models.HydrostaticFreeSurfaceModels.mask_immersed_model_fields!(model, grid)
-
-    # Update possible FieldTimeSeries used in the model
-    @apply_regionally Oceananigans.Models.HydrostaticFreeSurfaceModels.update_model_field_time_series!(model, model.clock)
-
-    Oceananigans.Models.HydrostaticFreeSurfaceModels.fill_halo_regions!(Oceananigans.Models.HydrostaticFreeSurfaceModels.prognostic_fields(model), model.clock, fields(model); async = true)
-    @apply_regionally Oceananigans.Models.HydrostaticFreeSurfaceModels.replace_horizontal_vector_halos!(model.velocities, model.grid)
-    @apply_regionally Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_auxiliaries!(model)
-
-    Oceananigans.Models.HydrostaticFreeSurfaceModels.fill_halo_regions!(model.diffusivity_fields; only_local_halos = true)
-
-    # [callback(model) for callback in callbacks if callback.callsite isa UpdateStateCallsite]
-
-    Oceananigans.Models.HydrostaticFreeSurfaceModels.update_biogeochemical_state!(model.biogeochemistry, model)
-
-    compute_tendencies &&
-        @apply_regionally Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_tendencies!(model, callbacks)
-
-    return nothing
-end
-
 function set_initial_condition!(model, amplitude)
     amplitude = Ref(amplitude)
 
@@ -58,9 +31,8 @@ function set_initial_condition!(model, amplitude)
     #apply_regionally!(set!, ϕ, ci)
     Oceananigans.set!(ϕ, ci)
 
-    # Oceananigans.initialize!(model)
-    # Oceananigans.
-    myupdate_state!(model)
+    Oceananigans.initialize!(model)
+    Oceananigans.update_state!(model)
 
     return nothing
 end
