@@ -17,22 +17,42 @@ using Oceananigans: architecture
 using KernelAbstractions
 
 
+# EnzymeRules.inactive_type(::Type{<:Oceananigans.Clock}) = true
+
+f(grid) = CenterField(grid)
+
 const maximum_diffusivity = 100
+
+"""
+    set_diffusivity!(model, diffusivity)
+
+Change diffusivity of model to `diffusivity`.
+"""
+function set_diffusivity!(model, diffusivity)
+    closure = VerticalScalarDiffusivity(; κ=diffusivity)
+    names = tuple(:c) # tracernames(model.tracers)
+    closure = with_tracers(names, closure)
+    model.closure = closure
+    return nothing
+end
+
+@inline function myset!(model, value)
+   ϕ = getproperty(model.tracers, :c)
+   
+   @apply_regionally set!(ϕ, value)
+
+   initialize!(model)
+   update_state!(model)
+
+    return nothing
+end
 
 function set_initial_condition!(model, amplitude)
     amplitude = Ref(amplitude)
 
     # This has a "width" of 0.1
-    ci(x, y, z) = amplitude[] * exp(-z^2 / 0.02 - (x^2 + y^2) / 0.05)
-    
-    ϕ = getproperty(model.tracers, :c)
-   
-    # @apply_regionally set!(ϕ,ci)
-    #apply_regionally!(set!, ϕ, ci)
-    Oceananigans.set!(ϕ, ci)
-
-    Oceananigans.initialize!(model)
-    Oceananigans.update_state!(model)
+    cᵢ(x, y, z) = amplitude[] * exp(-z^2 / 0.02 - (x^2 + y^2) / 0.05)
+    myset!(model, cᵢ)
 
     return nothing
 end
