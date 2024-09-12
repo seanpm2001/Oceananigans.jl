@@ -19,7 +19,6 @@ using KernelAbstractions
 
 const maximum_diffusivity = 100
 
-
 function set_initial_condition!(model, amplitude)
     amplitude = Ref(amplitude)
 
@@ -44,8 +43,18 @@ function set_initial_condition!(model, amplitude)
  model.closure,
  model.buoyancy)
 
-        Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_z_bcs!(Gⁿ[:c], tracers[:c], arch, args)
-	#apply_z_bcs!(Gⁿ[:c], tracers[:c], arch, args)
+    # Velocity fields
+    # for i in (:u, :v)
+    #     Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ[i], velocities[i], arch, args)
+    # end
+
+    # Free surface
+    # Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ.η, Oceananigans.Models.HydrostaticFreeSurfaceModels.displacement(free_surface), arch, args)
+
+    # Tracer fields
+    for i in propertynames(tracers)
+        Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ[:c], tracers[:c], arch, args)
+    end
 
     return nothing
 end
@@ -89,7 +98,6 @@ using InteractiveUtils
                                         boundary_conditions = (; c=c_bcs),
                                         closure = diffusion)
 
-    # set_initial_condition!(deepcopy(model), 1.0)
     amplitude2 = Ref(1.0)
 
     # This has a "width" of 0.1
