@@ -43,38 +43,6 @@ function myupdate_state!(model, grid, callbacks; compute_tendencies = true)
     return nothing
 end
 
-function mycompute_tendencies!(model, callbacks)
-
-    kernel_parameters = tuple(Oceananigans.Models.HydrostaticFreeSurfaceModels.interior_tendency_kernel_parameters(model.grid))
-
-    # Calculate contributions to momentum and tracer tendencies from fluxes and volume terms in the
-    # interior of the domain
-     Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_hydrostatic_free_surface_tendency_contributions!(model, kernel_parameters;
-                                                             active_cells_map = active_interior_map(model.grid))
-
-     Oceananigans.Models.HydrostaticFreeSurfaceModels.complete_communication_and_compute_boundary!(model, model.grid, model.architecture)
-
-    # Calculate contributions to momentum and tracer tendencies from user-prescribed fluxes across the
-    # boundaries of the domain
-     Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_hydrostatic_boundary_tendency_contributions!(model.timestepper.Gⁿ,
-                                                         model.architecture,
-                                                         model.velocities,
-                                                         model.free_surface,
-                                                         model.tracers,
-                                                         model.clock,
-                                                         fields(model),
-                                                         model.closure,
-                                                         model.buoyancy)
-
-    #for callback in callbacks
-    #    callback.callsite isa TendencyCallsite && callback(model)
-    #end
-
-     Oceananigans.Models.HydrostaticFreeSurfaceModels.update_tendencies!(model.biogeochemistry, model)
-
-    return nothing
-end
-
 function set_initial_condition!(model, amplitude)
     amplitude = Ref(amplitude)
 
@@ -89,8 +57,7 @@ function set_initial_condition!(model, amplitude)
 
     # Oceananigans.initialize!(model)
     # Oceananigans.
-    # myupdate_state!(model)
-    mycompute_tendencies!(model, ()) # callbacks)
+    myupdate_state!(model)
 
     return nothing
 end
