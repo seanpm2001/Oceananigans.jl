@@ -31,12 +31,12 @@ function set_initial_condition!(model, amplitude)
     #apply_regionally!(set!, ϕ, ci)
     Oceananigans.set!(ϕ, ci)
     
-    # kernel_parameters = tuple(Oceananigans.Models.HydrostaticFreeSurfaceModels.interior_tendency_kernel_parameters(model.grid))
+    kernel_parameters = tuple(Oceananigans.Models.HydrostaticFreeSurfaceModels.interior_tendency_kernel_parameters(model.grid))
     
    Gⁿ = model.timestepper.Gⁿ
  arch = model.architecture
- # velocities = model.velocities
- # free_surface = model.free_surface
+ velocities = model.velocities
+ free_surface = model.free_surface
  tracers = model.tracers
  args = (model.clock,
  fields(model),
@@ -44,17 +44,19 @@ function set_initial_condition!(model, amplitude)
  model.buoyancy)
 
     # Velocity fields
-    # for i in (:u, :v)
-    #     Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ[i], velocities[i], arch, args)
-    # end
+    for i in (:u, :v)
+        Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ[i], velocities[i], arch, args)
+    end
 
     # Free surface
-    # Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ.η, Oceananigans.Models.HydrostaticFreeSurfaceModels.displacement(free_surface), arch, args)
+    Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ.η, Oceananigans.Models.HydrostaticFreeSurfaceModels.displacement(free_surface), arch, args)
 
     # Tracer fields
     for i in propertynames(tracers)
-        Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ[:c], tracers[:c], arch, args)
+        Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ[i], tracers[i], arch, args)
     end
+
+
 
     return nothing
 end
