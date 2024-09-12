@@ -32,30 +32,15 @@ function set_initial_condition!(model, amplitude)
     Oceananigans.set!(ϕ, ci)
     
     kernel_parameters = tuple(Oceananigans.Models.HydrostaticFreeSurfaceModels.interior_tendency_kernel_parameters(model.grid))
-    
-   Gⁿ = model.timestepper.Gⁿ
- arch = model.architecture
- velocities = model.velocities
- free_surface = model.free_surface
- tracers = model.tracers
- args = (model.clock,
- fields(model),
- model.closure,
- model.buoyancy)
-
-    # Velocity fields
-    for i in (:u, :v)
-        Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ[i], velocities[i], arch, args)
-    end
-
-    # Free surface
-    Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ.η, Oceananigans.Models.HydrostaticFreeSurfaceModels.displacement(free_surface), arch, args)
-
-    # Tracer fields
-    for i in propertynames(tracers)
-        Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ[i], tracers[i], arch, args)
-    end
-
+    Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_hydrostatic_boundary_tendency_contributions!(model.timestepper.Gⁿ,
+                                                         model.architecture,
+                                                         model.velocities,
+                                                         model.free_surface,
+                                                         model.tracers,
+                                                         model.clock,
+                                                         fields(model),
+                                                         model.closure,
+                                                         model.buoyancy)
 
 
     return nothing
