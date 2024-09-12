@@ -25,18 +25,18 @@ myupdate_state!(model, callbacks=[]; compute_tendencies = true) =
     myupdate_state!(model, model.grid, callbacks; compute_tendencies)
 
 function myupdate_state!(model, grid, callbacks; compute_tendencies = true)
-    # Oceananigans.Models.HydrostaticFreeSurfaceModels.mask_immersed_model_fields!(model, grid)
+    Oceananigans.Models.HydrostaticFreeSurfaceModels.mask_immersed_model_fields!(model, grid)
 
     # Update possible FieldTimeSeries used in the model
-    # Oceananigans.Models.HydrostaticFreeSurfaceModels.update_model_field_time_series!(model, model.clock)
+    Oceananigans.Models.HydrostaticFreeSurfaceModels.update_model_field_time_series!(model, model.clock)
 
-    # Oceananigans.Models.HydrostaticFreeSurfaceModels.fill_halo_regions!(Oceananigans.Models.HydrostaticFreeSurfaceModels.prognostic_fields(model), model.clock, fields(model); async = true)
-    # Oceananigans.Models.HydrostaticFreeSurfaceModels.replace_horizontal_vector_halos!(model.velocities, model.grid)
-    # Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_auxiliaries!(model)
+    Oceananigans.Models.HydrostaticFreeSurfaceModels.fill_halo_regions!(Oceananigans.Models.HydrostaticFreeSurfaceModels.prognostic_fields(model), model.clock, fields(model); async = true)
+    Oceananigans.Models.HydrostaticFreeSurfaceModels.replace_horizontal_vector_halos!(model.velocities, model.grid)
+    Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_auxiliaries!(model)
 
-    # Oceananigans.Models.HydrostaticFreeSurfaceModels.fill_halo_regions!(model.diffusivity_fields; only_local_halos = true)
+    Oceananigans.Models.HydrostaticFreeSurfaceModels.fill_halo_regions!(model.diffusivity_fields; only_local_halos = true)
 
-    # Oceananigans.Models.HydrostaticFreeSurfaceModels.update_biogeochemical_state!(model.biogeochemistry, model)
+    Oceananigans.Models.HydrostaticFreeSurfaceModels.update_biogeochemical_state!(model.biogeochemistry, model)
 
     Oceananigans.Models.HydrostaticFreeSurfaceModels.compute_tendencies!(model, callbacks)
 
