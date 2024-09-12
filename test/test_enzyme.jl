@@ -19,29 +19,6 @@ using KernelAbstractions
 
 const maximum_diffusivity = 100
 
-apply_z_bcs!(Gc, c, args...) = apply_z_bcs!(Gc, Gc.grid, c, c.boundary_conditions.bottom, c.boundary_conditions.top, args...)
-
-apply_z_bcs!(Gc, grid::AbstractGrid, c, bottom_bc, top_bc, arch::AbstractArchitecture, args...) =
-    launch!(arch, grid, :xy, _apply_z_bcs!, Gc, instantiated_location(Gc), grid, bottom_bc, top_bc, Tuple(args))
-
-
-@inline function apply_z_bottom_bc!(Gc, loc, bottom_flux, i, j, grid, args...)
-    LX, LY, LZ = loc
-    @inbounds Gc[i, j, 1] += getbc(bottom_flux, i, j, grid, args...) * Az(i, j, 1, grid, LX, LY, flip(LZ)) / volume(i, j, 1, grid, LX, LY, LZ)
-    return nothing
-end
-
-@inline function apply_z_top_bc!(Gc, loc, top_flux, i, j, grid, args...)
-    LX, LY, LZ = loc
-    @inbounds Gc[i, j, grid.Nz] -= getbc(top_flux, i, j, grid, args...) * Az(i, j, grid.Nz+1, grid, LX, LY, flip(LZ)) / volume(i, j, grid.Nz, grid, LX, LY, LZ)
-    return nothing
-end
-
-@kernel function _apply_z_bcs!(Gc, loc, grid, bottom_bc, top_bc, args)
-    i, j = @index(Global, NTuple)
-    apply_z_bottom_bc!(Gc, loc, bottom_bc, i, j, grid, args...)
-       apply_z_top_bc!(Gc, loc, top_bc,    i, j, grid, args...)
-end
 
 function set_initial_condition!(model, amplitude)
     amplitude = Ref(amplitude)
@@ -67,8 +44,8 @@ function set_initial_condition!(model, amplitude)
  model.closure,
  model.buoyancy)
 
-        #Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_z_bcs!(Gⁿ[:c], tracers[:c], arch, args)
-	apply_z_bcs!(Gⁿ[:c], tracers[:c], arch, args)
+        Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_z_bcs!(Gⁿ[:c], tracers[:c], arch, args)
+	#apply_z_bcs!(Gⁿ[:c], tracers[:c], arch, args)
 
     return nothing
 end
@@ -112,6 +89,7 @@ using InteractiveUtils
                                         boundary_conditions = (; c=c_bcs),
                                         closure = diffusion)
 
+    # set_initial_condition!(deepcopy(model), 1.0)
     amplitude2 = Ref(1.0)
 
     # This has a "width" of 0.1
