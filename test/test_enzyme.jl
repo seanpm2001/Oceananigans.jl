@@ -16,53 +16,64 @@ using Oceananigans.Fields: FunctionField
 using Oceananigans: architecture
 using KernelAbstractions
 
+using InteractiveUtils
 
-const maximum_diffusivity = 100
+@inline function apply_z_bottom_bc!(Gc, loc, bottom_flux, i, j, grid, args...)
+    LX, LY, LZ = loc
+    @inbounds Gc[i, j, 1] += Oceananigans.BoundaryConditions.getbc(bottom_flux, i, j, grid, args...) * Oceananigans.AbstractOperations.Az(i, j, 1, grid, LX, LY, Oceananigans.AbstractOperations.flip(LZ)) / Oceananigans.Operators.volume(i, j, 1, grid, LX, LY, LZ)
+    return nothing
+end
+
+@inline function apply_z_top_bc!(Gc, loc, top_flux, i, j, grid, args...)
+    LX, LY, LZ = loc
+    @show @which Oceananigans.BoundaryConditions.getbc(top_flux, i, j, grid, args...) 
+    @inbounds Gc[i, j, grid.Nz] *= Oceananigans.BoundaryConditions.getbc(top_flux, i, j, grid, args...) # * Oceananigans.AbstractOperations.Az(i, j, grid.Nz+1, grid, LX, LY, Oceananigans.AbstractOperations.flip(LZ)) / Oceananigans.Operators.volume(i, j, grid.Nz, grid, LX, LY, LZ)
+    return nothing
+end
+
+@kernel function _apply_z_bcs!(Gc, loc, grid, bottom_bc, top_bc, args)
+    i, j = @index(Global, NTuple)
+    # Oceananigans.BoundaryConditions.apply_z_bottom_bc!(Gc, loc, bottom_bc, i, j, grid, args...)
+    # Oceananigans.BoundaryConditions.
+    apply_z_top_bc!(Gc, loc, top_bc,    i, j, grid, args...)
+end
+
+myapply_z_bcs!(Gc, grid::AbstractGrid, c, bottom_bc, top_bc, arch::AbstractArchitecture, args...) =
+    launch!(arch, grid, :xy, _apply_z_bcs!, Gc, Oceananigans.instantiated_location(Gc), grid, bottom_bc, top_bc, Tuple(args))
+
+myapply_z_bcs!(Gc, c, args...) = myapply_z_bcs!(Gc, Gc.grid, c, c.boundary_conditions.bottom, c.boundary_conditions.top, args...)
 
 function set_initial_condition!(model, amplitude)
+    tracers = model.tracers
+    
     amplitude = Ref(amplitude)
 
     # This has a "width" of 0.1
     ci(x, y, z) = amplitude[] * exp(-z^2 / 0.02 - (x^2 + y^2) / 0.05)
     
-    ϕ = getproperty(model.tracers, :c)
+    phi = getproperty(tracers, :c)
    
-    # @apply_regionally set!(ϕ,ci)
-    #apply_regionally!(set!, ϕ, ci)
-    Oceananigans.set!(ϕ, ci)
-    
-    # kernel_parameters = tuple(Oceananigans.Models.HydrostaticFreeSurfaceModels.interior_tendency_kernel_parameters(model.grid))
+    Oceananigans.set!(phi, ci)
     
    Gⁿ = model.timestepper.Gⁿ
  arch = model.architecture
- # velocities = model.velocities
- # free_surface = model.free_surface
- tracers = model.tracers
  args = (model.clock,
  fields(model),
  model.closure,
  model.buoyancy)
 
-    # Velocity fields
-    # for i in (:u, :v)
-    #     Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ[i], velocities[i], arch, args)
-    # end
-
-    # Free surface
-    # Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ.η, Oceananigans.Models.HydrostaticFreeSurfaceModels.displacement(free_surface), arch, args)
-
-    # Tracer fields
-    for i in propertynames(tracers)
-        Oceananigans.Models.HydrostaticFreeSurfaceModels.apply_flux_bcs!(Gⁿ[:c], tracers[:c], arch, args)
-    end
+    Gc = Gⁿ[:c]
+    # myapply_z_bcs!(Gc, Gc.grid, phi, phi.boundary_conditions.bottom, phi.boundary_conditions.top, arch, args...)
+    myapply_z_bcs!(Gc, phi, arch, args...)
+    
+    # launch!(arch, grid, :xy, _apply_z_bcs!, Gc, Oceananigans.instantiated_location(Gc), grid, bottom_bc, top_bc, Tuple(args))
 
     return nothing
 end
 
-using InteractiveUtils
 
 @testset "Enzyme on advection and diffusion WITH flux boundary condition" begin
-    Nx = Ny = 64
+    Nx = Ny = 2
     Nz = 8
 
     Lx = Ly = L = 2π
@@ -100,15 +111,11 @@ using InteractiveUtils
 
     amplitude2 = Ref(1.0)
 
-    # This has a "width" of 0.1
     cf(x, y, z) = amplitude2[] * exp(-z^2 / 0.02 - (x^2 + y^2) / 0.05)
-    # @show @which set!(model, cf)
 
-    # Now for real
     amplitude = 1.0
     κ = 1.0
     dmodel = Enzyme.make_zero(model)
-    # set_diffusivity!(dmodel, 0)
     
     dc²_dκ = autodiff(Enzyme.Reverse,
                       set_initial_condition!,
