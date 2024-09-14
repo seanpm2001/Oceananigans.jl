@@ -18,24 +18,38 @@ using KernelAbstractions
 
 using InteractiveUtils
 
-@inline function apply_z_bottom_bc!(Gc, loc, bottom_flux, i, j, grid, args...)
-    LX, LY, LZ = loc
-    @inbounds Gc[i, j, 1] += Oceananigans.BoundaryConditions.getbc(bottom_flux, i, j, grid, args...) * Oceananigans.AbstractOperations.Az(i, j, 1, grid, LX, LY, Oceananigans.AbstractOperations.flip(LZ)) / Oceananigans.Operators.volume(i, j, 1, grid, LX, LY, LZ)
+    
+@inline function tracer_flux(x, y, t, c, p)
+	c₀ = p.surface_tracer_concentration
+	u★ = p.piston_velocity
+	return - u★ * (c₀ - c)
+end
+
+@inline function getbc(bc::Oceananigans.BoundaryConditions.ZBoundaryFunction{LX, LY, S}, i::Integer, j::Integer,
+                       grid::AbstractGrid) where {LX, LY, S}
+    cbf = bc.condition
+    k, k′ = Oceananigans.BoundaryConditions.domain_boundary_indices(S(), grid.Nz)
+    # args = Oceananigans.BoundaryConditions.user_function_arguments(i, j, k, grid, model_fields, cbf.parameters, cbf)
+    #@show args
+    X = Oceananigans.BoundaryConditions.z_boundary_node(i, j, k′, grid, LX(), LY())
+    #@show X
+    # args = (9.561340652234675e-48, (; surface_tracer_concentration = 1, piston_velocity = 0.1))
+    # X = (-1.5707963267948966, -1.5707963267948966)
+    return tracer_flux(X..., nothing, 9.561340652234675e-48, (; surface_tracer_concentration = 1, piston_velocity = 0.1))
+end
+
+@inline function apply_z_top_bc!(Gc, top_flux, i, j, grid, args...)
+    # LX, LY, LZ = loc
+    @show @which getbc(top_flux, i, j, grid, args...) 
+    @inbounds Gc[i, j, grid.Nz] *= getbc(top_flux, i, j, grid, args...) # * Oceananigans.AbstractOperations.Az(i, j, grid.Nz+1, grid, LX, LY, Oceananigans.AbstractOperations.flip(LZ)) / Oceananigans.Operators.volume(i, j, grid.Nz, grid, LX, LY, LZ)
     return nothing
 end
 
-@inline function apply_z_top_bc!(Gc, loc, top_flux, i, j, grid, args...)
-    LX, LY, LZ = loc
-    @show @which Oceananigans.BoundaryConditions.getbc(top_flux, i, j, grid, args...) 
-    @inbounds Gc[i, j, grid.Nz] *= Oceananigans.BoundaryConditions.getbc(top_flux, i, j, grid, args...) # * Oceananigans.AbstractOperations.Az(i, j, grid.Nz+1, grid, LX, LY, Oceananigans.AbstractOperations.flip(LZ)) / Oceananigans.Operators.volume(i, j, grid.Nz, grid, LX, LY, LZ)
-    return nothing
-end
-
-@kernel function _apply_z_bcs!(Gc, loc, grid, bottom_bc, top_bc, args)
+@kernel function _apply_z_bcs!(Gc, grid, top_bc, args)
     i, j = @index(Global, NTuple)
     # Oceananigans.BoundaryConditions.apply_z_bottom_bc!(Gc, loc, bottom_bc, i, j, grid, args...)
     # Oceananigans.BoundaryConditions.
-    apply_z_top_bc!(Gc, loc, top_bc,    i, j, grid, args...)
+    apply_z_top_bc!(Gc, top_bc,    i, j, grid, args...)
 end
 
 myapply_z_bcs!(Gc, grid::AbstractGrid, c, bottom_bc, top_bc, arch::AbstractArchitecture, args...) =
@@ -55,18 +69,14 @@ function set_initial_condition!(model, amplitude)
    
     Oceananigans.set!(phi, ci)
     
-   Gⁿ = model.timestepper.Gⁿ
- arch = model.architecture
- args = (model.clock,
- fields(model),
- model.closure,
- model.buoyancy)
+    Gⁿ = model.timestepper.Gⁿ
 
     Gc = Gⁿ[:c]
     # myapply_z_bcs!(Gc, Gc.grid, phi, phi.boundary_conditions.bottom, phi.boundary_conditions.top, arch, args...)
-    myapply_z_bcs!(Gc, phi, arch, args...)
+    # myapply_z_bcs!(Gc, phi, arch, model.clock, fields(model))
     
-    # launch!(arch, grid, :xy, _apply_z_bcs!, Gc, Oceananigans.instantiated_location(Gc), grid, bottom_bc, top_bc, Tuple(args))
+    grid = Gc.grid
+    launch!(CPU(), grid, :xy, _apply_z_bcs!, Gc, grid, phi.boundary_conditions.top, ())
 
     return nothing
 end
@@ -86,11 +96,6 @@ end
     grid = RectilinearGrid(size=(Nx, Ny, Nz); x, y, z, topology)
     diffusion = VerticalScalarDiffusivity(κ=0.1)
 
-    @inline function tracer_flux(x, y, t, c, p)
-        c₀ = p.surface_tracer_concentration
-        u★ = p.piston_velocity
-        return - u★ * (c₀ - c)
-    end
 
     parameters = (surface_tracer_concentration = 1,
                   piston_velocity = 0.1)
@@ -117,6 +122,8 @@ end
     κ = 1.0
     dmodel = Enzyme.make_zero(model)
     
+    # set_initial_condition!(deepcopy(model), amplitude)
+
     dc²_dκ = autodiff(Enzyme.Reverse,
                       set_initial_condition!,
                       Duplicated(model, dmodel),
