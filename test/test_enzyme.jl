@@ -25,59 +25,27 @@ using InteractiveUtils
 	return - u★ * (c₀ - c)
 end
 
-@inline function getbc(bc::Oceananigans.BoundaryConditions.ZBoundaryFunction{LX, LY, S}, i::Integer, j::Integer,
-                       grid::AbstractGrid) where {LX, LY, S}
-    cbf = bc.condition
-    k, k′ = Oceananigans.BoundaryConditions.domain_boundary_indices(S(), grid.Nz)
+@inline function getbc(bc::Oceananigans.BoundaryConditions.ZBoundaryFunction{LX, LY, S}, i::Integer, j::Integer) where {LX, LY, S}
+    #cbf = bc.condition
+    #k, k′ = Oceananigans.BoundaryConditions.domain_boundary_indices(S(), grid.Nz)
     # args = Oceananigans.BoundaryConditions.user_function_arguments(i, j, k, grid, model_fields, cbf.parameters, cbf)
     #@show args
-    X = Oceananigans.BoundaryConditions.z_boundary_node(i, j, k′, grid, LX(), LY())
+    # X = Oceananigans.BoundaryConditions.z_boundary_node(i, j, k′, grid, LX(), LY())
     #@show X
     # args = (9.561340652234675e-48, (; surface_tracer_concentration = 1, piston_velocity = 0.1))
-    # X = (-1.5707963267948966, -1.5707963267948966)
+    X = (-1.5707963267948966, -1.5707963267948966)
     return tracer_flux(X..., nothing, 9.561340652234675e-48, (; surface_tracer_concentration = 1, piston_velocity = 0.1))
 end
 
-@inline function apply_z_top_bc!(Gc, top_flux, i, j, grid, args...)
-    # LX, LY, LZ = loc
-    @show @which getbc(top_flux, i, j, grid, args...) 
-    @inbounds Gc[i, j, grid.Nz] *= getbc(top_flux, i, j, grid, args...) # * Oceananigans.AbstractOperations.Az(i, j, grid.Nz+1, grid, LX, LY, Oceananigans.AbstractOperations.flip(LZ)) / Oceananigans.Operators.volume(i, j, grid.Nz, grid, LX, LY, LZ)
-    return nothing
-end
-
-@kernel function _apply_z_bcs!(Gc, grid, top_bc, args)
+@kernel function _apply_z_bcs!(top_bc)
     i, j = @index(Global, NTuple)
-    # Oceananigans.BoundaryConditions.apply_z_bottom_bc!(Gc, loc, bottom_bc, i, j, grid, args...)
-    # Oceananigans.BoundaryConditions.
-    apply_z_top_bc!(Gc, top_bc,    i, j, grid, args...)
+    
+    @show @which getbc(top_bc, i, j) 
 end
 
-myapply_z_bcs!(Gc, grid::AbstractGrid, c, bottom_bc, top_bc, arch::AbstractArchitecture, args...) =
-    launch!(arch, grid, :xy, _apply_z_bcs!, Gc, Oceananigans.instantiated_location(Gc), grid, bottom_bc, top_bc, Tuple(args))
-
-myapply_z_bcs!(Gc, c, args...) = myapply_z_bcs!(Gc, Gc.grid, c, c.boundary_conditions.bottom, c.boundary_conditions.top, args...)
-
-function set_initial_condition!(model, amplitude)
-    tracers = model.tracers
-    
-    amplitude = Ref(amplitude)
-
-    # This has a "width" of 0.1
-    ci(x, y, z) = amplitude[] * exp(-z^2 / 0.02 - (x^2 + y^2) / 0.05)
-    
-    phi = getproperty(tracers, :c)
-   
-    Oceananigans.set!(phi, ci)
-    
-    Gⁿ = model.timestepper.Gⁿ
-
-    Gc = Gⁿ[:c]
-    # myapply_z_bcs!(Gc, Gc.grid, phi, phi.boundary_conditions.bottom, phi.boundary_conditions.top, arch, args...)
-    # myapply_z_bcs!(Gc, phi, arch, model.clock, fields(model))
-    
+function set_initial_condition!(phi, Gc)
     grid = Gc.grid
-    launch!(CPU(), grid, :xy, _apply_z_bcs!, Gc, grid, phi.boundary_conditions.top, ())
-
+    launch!(CPU(), grid, :xy, _apply_z_bcs!, phi.top)
     return nothing
 end
 
@@ -115,18 +83,25 @@ end
                                         closure = diffusion)
 
     amplitude2 = Ref(1.0)
-
-    cf(x, y, z) = amplitude2[] * exp(-z^2 / 0.02 - (x^2 + y^2) / 0.05)
+    ci(x, y, z) = amplitude2[] * 0.09 # exp(-z^2 / 0.02 - (x^2 + y^2) / 0.05)
+    Oceananigans.set!(getproperty(model.tracers, :c), ci)
 
     amplitude = 1.0
     κ = 1.0
     dmodel = Enzyme.make_zero(model)
     
+    phi = getproperty(model.tracers, :c).boundary_conditions
+    dphi = getproperty(dmodel.tracers, :c).boundary_conditions
+    
+    Gc = model.timestepper.Gⁿ[:c]
+    dGc = dmodel.timestepper.Gⁿ[:c]
+    
     # set_initial_condition!(deepcopy(model), amplitude)
 
     dc²_dκ = autodiff(Enzyme.Reverse,
                       set_initial_condition!,
-                      Duplicated(model, dmodel),
-                      Const(amplitude))
+		      Duplicated(phi, dphi),
+		      Duplicated(Gc, dGc)
+		      )
     
 end
