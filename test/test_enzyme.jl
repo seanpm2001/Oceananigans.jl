@@ -30,14 +30,12 @@ end
   return - u★ * (c₀ - c)
 end
 
-@inline function mygetbc(bc::Oceananigans.BoundaryConditions.ZBoundaryFunction{LX, LY, S}, i::Integer, j::Integer,
-                       grid::AbstractGrid, model_fields) where {LX, LY, S}
+@inline function mygetbc(bc::Oceananigans.BoundaryConditions.ZBoundaryFunction{LX, LY, S}, grid::AbstractGrid, model_fields) where {LX, LY, S}
     cbf = bc.condition
-    k, k′ = Oceananigans.BoundaryConditions.domain_boundary_indices(S(), grid.Nz)
     
     pop = cbf.field_dependencies_interp
     idx = cbf.field_dependencies_indices
-    field_args = @inbounds (pop[1](i, j, k, grid, model_fields[idx[1]]),)
+    field_args = @inbounds (pop[1](1, 1, 1, grid, model_fields[idx[1]]),)
     args = (field_args...,)
 
     return tracer_flux(args..., cbf.parameters)
@@ -45,28 +43,17 @@ end
 
 @kernel function my_apply_z_bcs!(Gc, grid, top_flux, model_fields)
     i, j = @index(Global, NTuple)
-    @inbounds Gc[i, j, grid.Nz] *= mygetbc(top_flux, i, j, grid, model_fields)
+    @inbounds Gc[i, j, grid.Nz] *= mygetbc(top_flux, grid, model_fields)
     nothing
 end
 
-function set_initial_condition!(model, amplitude)
-    tracers = model.tracers
-    
-    amplitude = Ref(amplitude)
+function set_initial_condition!(model, grid, top)
 
-    # This has a "width" of 0.1
-    ci(x, y, z) = amplitude[] * exp(-z^2 / 0.02 - (x^2 + y^2) / 0.05)
-    
-    phi = getproperty(tracers, :c)
-   
-    Oceananigans.set!(phi, ci)
-    
     Gⁿ = model.timestepper.Gⁿ
 
     Gc = Gⁿ[:c]
 
-    grid = Gc.grid
-    launch!(CPU(), grid, :xy, my_apply_z_bcs!, Gc,  grid, phi.boundary_conditions.top, fields(model))
+    launch!(CPU(), grid, :xy, my_apply_z_bcs!, Gc,  grid, top, fields(model))
 
     return nothing
 end
@@ -103,19 +90,20 @@ end
                                         boundary_conditions = (; c=c_bcs),
                                         closure = diffusion)
 
-    amplitude2 = Ref(1.0)
-
-    cf(x, y, z) = amplitude2[] * exp(-z^2 / 0.02 - (x^2 + y^2) / 0.05)
-
-    amplitude = 1.0
+    amplitude = Ref(1.0)
+    ci(x, y, z) = amplitude[] * exp(-z^2 / 0.02 - (x^2 + y^2) / 0.05)
+    Oceananigans.set!(getproperty(model.tracers, :c), ci)
+    
     κ = 1.0
     dmodel = Enzyme.make_zero(model)
     
-    set_initial_condition!(deepcopy(model), amplitude)
+    # set_initial_condition!(deepcopy(model), grid)
 
     dc²_dκ = autodiff(Enzyme.Reverse,
                       set_initial_condition!,
                       Duplicated(model, dmodel),
-                      Const(amplitude))
+                      Const(grid),
+		      Const(getproperty(model.tracers, :c).boundary_conditions.top) # phi = getproperty(model.tracers, :c)
+		      )
     
 end
