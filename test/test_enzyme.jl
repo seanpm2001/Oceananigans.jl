@@ -18,35 +18,35 @@ using KernelAbstractions
 
 using InteractiveUtils
 
-@inline function tracer_flux(x, y, t, c, p)
+@inline function tracer_flux(c, p)
   c₀ = p.surface_tracer_concentration
   u★ = p.piston_velocity
   return - u★ * (c₀ - c)
 end
 
-@inline function apply_z_bottom_bc!(Gc, loc, bottom_flux, i, j, grid, args...)
-    LX, LY, LZ = loc
-    @inbounds Gc[i, j, 1] += Oceananigans.BoundaryConditions.getbc(bottom_flux, i, j, grid, args...) * Oceananigans.AbstractOperations.Az(i, j, 1, grid, LX, LY, Oceananigans.AbstractOperations.flip(LZ)) / Oceananigans.Operators.volume(i, j, 1, grid, LX, LY, LZ)
-    return nothing
+@inline function tracer_flux2(x, y, t, c, p)
+  c₀ = p.surface_tracer_concentration
+  u★ = p.piston_velocity
+  return - u★ * (c₀ - c)
 end
 
-@inline function getbc(bc::Oceananigans.BoundaryConditions.ZBoundaryFunction{LX, LY, S}, i::Integer, j::Integer,
+@inline function mygetbc(bc::Oceananigans.BoundaryConditions.ZBoundaryFunction{LX, LY, S}, i::Integer, j::Integer,
                        grid::AbstractGrid, model_fields) where {LX, LY, S}
     cbf = bc.condition
     k, k′ = Oceananigans.BoundaryConditions.domain_boundary_indices(S(), grid.Nz)
-    args = Oceananigans.BoundaryConditions.user_function_arguments(i, j, k, grid, model_fields, cbf.parameters, cbf)
-    X = (-1.5707963267948966, -1.5707963267948966)
-    return tracer_flux(X..., nothing, args...)
+    
+    pop = cbf.field_dependencies_interp
+    idx = cbf.field_dependencies_indices
+    field_args = @inbounds (pop[1](i, j, k, grid, model_fields[idx[1]]),)
+    args = (field_args...,)
+
+    return tracer_flux(args..., cbf.parameters)
 end
 
-@inline function apply_z_top_bc!(Gc, top_flux, i, j, grid, model_fields)
-    @inbounds Gc[i, j, grid.Nz] *= getbc(top_flux, i, j, grid, model_fields)
-    return nothing
-end
-
-@kernel function _apply_z_bcs!(Gc, grid, top_bc, model_fields)
+@kernel function my_apply_z_bcs!(Gc, grid, top_flux, model_fields)
     i, j = @index(Global, NTuple)
-    apply_z_top_bc!(Gc, top_bc,    i, j, grid, model_fields)
+    @inbounds Gc[i, j, grid.Nz] *= mygetbc(top_flux, i, j, grid, model_fields)
+    nothing
 end
 
 function set_initial_condition!(model, amplitude)
@@ -61,12 +61,12 @@ function set_initial_condition!(model, amplitude)
    
     Oceananigans.set!(phi, ci)
     
-   Gⁿ = model.timestepper.Gⁿ
+    Gⁿ = model.timestepper.Gⁿ
 
     Gc = Gⁿ[:c]
 
     grid = Gc.grid
-    launch!(CPU(), grid, :xy, _apply_z_bcs!, Gc,  grid, phi.boundary_conditions.top, fields(model))
+    launch!(CPU(), grid, :xy, my_apply_z_bcs!, Gc,  grid, phi.boundary_conditions.top, fields(model))
 
     return nothing
 end
@@ -89,7 +89,7 @@ end
     parameters = (surface_tracer_concentration = 1,
                   piston_velocity = 0.1)
 
-    top_c_bc = FluxBoundaryCondition(tracer_flux, field_dependencies=:c; parameters)
+    top_c_bc = FluxBoundaryCondition(tracer_flux2, field_dependencies=:c; parameters)
     c_bcs = FieldBoundaryConditions(top=top_c_bc)
 
     # TODO:
@@ -111,6 +111,8 @@ end
     κ = 1.0
     dmodel = Enzyme.make_zero(model)
     
+    set_initial_condition!(deepcopy(model), amplitude)
+
     dc²_dκ = autodiff(Enzyme.Reverse,
                       set_initial_condition!,
                       Duplicated(model, dmodel),
