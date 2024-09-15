@@ -47,10 +47,8 @@ end
     nothing
 end
 
-function set_initial_condition!(Gc, model, grid, top)
-
-    launch!(CPU(), grid, :xy, my_apply_z_bcs!, Gc,  grid, top, fields(model))
-
+function set_initial_condition!(Gc, fields, grid, top)
+    launch!(CPU(), grid, :xy, my_apply_z_bcs!, Gc,  grid, top, fields)
     return nothing
 end
 
@@ -101,7 +99,7 @@ end
     dc²_dκ = autodiff(Enzyme.Reverse,
                       set_initial_condition!,
 		      Duplicated(Gc, dGc),
-                      Duplicated(model, dmodel),
+		      Duplicated(fields(model), fields(dmodel)),
                       Const(grid),
 		      Const(getproperty(model.tracers, :c).boundary_conditions.top) # phi = getproperty(model.tracers, :c)
 		      )
